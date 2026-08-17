@@ -1,0 +1,32 @@
+=== SisTer Reflexa MVP-0 verification ===
+UTC: 2026-08-17T20:08:16Z
+
+-- The CXX compiler identification is GNU 16.1.1
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /run/media/jpereiratrindade/labeco10T/dev/cpp/sister-reflexa/build
+[1/2] Building CXX object CMakeFiles/sister-reflexa.dir/src/main.cpp.o
+[2/2] Linking CXX executable sister-reflexa
+Test project /run/media/jpereiratrindade/labeco10T/dev/cpp/sister-reflexa/build
+    Start 1: sister_reflexa_self_test
+1/2 Test #1: sister_reflexa_self_test .........   Passed    0.00 sec
+    Start 2: sister_reflexa_status
+2/2 Test #2: sister_reflexa_status ............   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.00 sec
+
+SisTer Reflexa
+core=READY
+completeness=INCOMPLETE
+phase=MVP-0
+model=NOT_TRAINED
+score_policy=NO_AGGREGATE_SCORE
+
+MVP-0: PASS

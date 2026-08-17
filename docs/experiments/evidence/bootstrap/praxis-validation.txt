@@ -1,0 +1,6 @@
+FAIL  governed evidence does not prove PASS — BOOTSTRAP
+PASS  canonical state — .hoa/project-state.yaml
+PASS  canonical state conforms to project-state.schema.json
+PASS  governance method — praxis-governed-engineering/0.1
+PASS  gate — scripts/verify_mvp0.sh
+PASS  governed evidence — docs/experiments/evidence/bootstrap/verification.txt

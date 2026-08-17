@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+/build/
+/.build/
+*.sqlite
+*.sqlite3
+*.db
+.cache/
+.DS_Store
+/data/*.tsv
+!/data/.gitkeep
+/model/data/*.tsv
+!/model/data/.gitkeep

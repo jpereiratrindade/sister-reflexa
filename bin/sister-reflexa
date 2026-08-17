@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -Eeuo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+case "${1:-help}" in
+  build) exec "$ROOT/scripts/build.sh" ;;
+  verify) exec "$ROOT/scripts/verify_mvp0.sh" ;;
+  status) [[ -x "$ROOT/build/sister-reflexa" ]] || "$ROOT/scripts/build.sh"; exec "$ROOT/build/sister-reflexa" --status ;;
+  serve)
+    [[ -x "$ROOT/build/sister-reflexa" ]] || "$ROOT/scripts/build.sh"
+    cd "$ROOT"
+    exec "$ROOT/build/sister-reflexa" --serve "${HOST:-127.0.0.1}" "${PORT:-8092}"
+    ;;
+  *) printf 'Uso: %s {build|verify|status|serve}\n' "$0" ;;
+esac

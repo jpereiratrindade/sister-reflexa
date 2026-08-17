@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SisTer Reflexa</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header>
+  <div><small>SISTER · REFLEXIVIDADE EVIDENCIADA</small><h1>SisTer Reflexa</h1></div>
+  <div class="chips"><span id="health">carregando</span><span>sem score agregado</span><span id="model">modelo: —</span></div>
+</header>
+<main>
+  <section class="hero">
+    <div><h2>Da trajetória para a evidência</h2><p>Registre o antes, o evento, as alegações, o que as sustenta e como a leitura muda ao longo do tempo. O sistema não tenta adivinhar reflexividade por uma fórmula.</p></div>
+    <div class="principle">destino aberto<br><strong>passado preservado</strong><br>transição explicável</div>
+  </section>
+
+  <section class="metrics" id="metrics"></section>
+
+  <section class="panel">
+    <div class="panel-head"><div><small>VISÃO GERAL</small><h2>Trajetória</h2></div><button onclick="refresh()">Atualizar</button></div>
+    <div id="trajectory" class="trajectory"></div>
+  </section>
+
+  <div class="grid two">
+    <section class="panel">
+      <div class="panel-head"><div><small>ENTRADA</small><h2>Novo evento</h2></div></div>
+      <form data-endpoint="/api/events">
+        <label>Título<input name="title" required></label>
+        <label>Tipo<select name="type"><option>field_day</option><option>course</option><option>lecture</option><option>workshop</option><option>experiment</option><option>institutional_decision</option><option>other</option></select></label>
+        <label>Tempo válido<input name="valid_time" placeholder="2026-08-17 ou intervalo"></label>
+        <label>Contexto anterior<textarea name="context" required placeholder="O que precisamos preservar do ponto de partida para reconhecer mudança depois?"></textarea></label>
+        <button type="submit">Registrar sem sobrescrever</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><small>ALEGAÇÃO</small><h2>O que pode ter mudado?</h2></div></div>
+      <form data-endpoint="/api/claims">
+        <label>Evento<select name="event_id" class="event-select" required></select></label>
+        <label>Alegação<textarea name="text" required placeholder="Ex.: participantes alteraram a forma de decidir o manejo..."></textarea></label>
+        <button type="submit">Registrar alegação</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="grid two">
+    <section class="panel">
+      <div class="panel-head"><div><small>EVIDÊNCIA</small><h2>O que sustenta a alegação?</h2></div></div>
+      <form data-endpoint="/api/evidence">
+        <label>Alegação<select name="claim_id" class="claim-select" required></select></label>
+        <div class="grid two compact"><label>Tipo<input name="kind" placeholder="document, interview, artifact..."></label><label>Tempo válido<input name="valid_time"></label></div>
+        <label>Fonte / referência<input name="source_ref" placeholder="arquivo, URL interna, ata, depoimento..."></label>
+        <label>Digest opcional<input name="digest" placeholder="sha256:..."></label>
+        <label>Conteúdo / observação<textarea name="content" required></textarea></label>
+        <button type="submit">Acrescentar evidência</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><small>LINHAGEM</small><h2>Relacionar entidades</h2></div></div>
+      <form data-endpoint="/api/relations">
+        <label>Origem<input name="from_id" required placeholder="evt-..., clm-..., evd-..."></label>
+        <label>Relação<select name="relation"><option>contributes_to</option><option>successor_of</option><option>supports</option><option>contests</option><option>derived_from</option><option>changes_next_cycle</option></select></label>
+        <label>Destino<input name="to_id" required></label>
+        <label>Tempo válido<input name="valid_time"></label>
+        <label>Nota<textarea name="note"></textarea></label>
+        <button type="submit">Criar aresta</button>
+      </form>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head"><div><small>SNAPSHOT HUMANO · RUBRIC 0.1</small><h2>Avaliação evidenciada</h2></div><span class="warning">não agrega em IRE</span></div>
+    <form data-endpoint="/api/evaluations">
+      <div class="grid three compact"><label>Evento<select name="event_id" class="event-select" required></select></label><label>Veredito<select name="verdict"><option>INSUFFICIENT</option><option>EMERGENT</option><option>PARTIAL</option><option>STRONG</option><option>REFLEXIVE</option></select></label><label>Incerteza<select name="uncertainty"><option>HIGH</option><option>MED</option><option>LOW</option></select></label></div>
+      <div class="dimensions" id="dimensions"></div>
+      <label>Síntese e limites<textarea name="summary" required placeholder="Explique por que esta avaliação é defensável e o que permanece não demonstrado."></textarea></label>
+      <button type="submit">Congelar novo snapshot</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><small>DO GERAL AO ESPECÍFICO</small><h2>Registros</h2></div></div>
+    <div id="records"></div>
+  </section>
+
+  <section class="panel model-panel">
+    <div><small>MODELO 2 · CANDIDATO</small><h2>TinyReflexiveLM</h2><p id="model-note"></p></div>
+    <div><code>evidence bundle → causal LM → perfil + lacunas</code><p>O corpus nasce dos snapshots humanos versionados. Nenhuma equação de IRE é usada como professor oculto.</p></div>
+  </section>
+</main>
+<footer>MVP-0 local · avaliação de trajetórias, não de pessoas · append-only</footer>
+<script src="/assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+version: "0.1"
+resolved: GPL-3.0-or-later
+provenance: default
+policy: praxis-new-project-license/0.1
+policy_default: GPL-3.0-or-later
+artifact: LICENSE
+artifact_sha256: 7f553b693116c2c443928c003805d50e9c856d63ae40c8aa2a09808c682fc01e

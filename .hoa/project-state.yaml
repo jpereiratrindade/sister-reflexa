@@ -1,0 +1,16 @@
+version: "1.0"
+project: sister_reflexa
+governance_method: praxis-governed-engineering/0.1
+bootstrap_script: scripts/bootstrap_project.sh
+bootstrap_policy: create_once
+phase: MVP-0
+status: active
+last_verified_milestone: BOOTSTRAP
+last_verified_commit: "0000000"
+last_verified_gate: scripts/verify_mvp0.sh
+last_verified_evidence: docs/experiments/evidence/bootstrap/verification.txt
+next_milestone: TRLM-E001
+next_milestone_status: proposed
+next_milestone_authorized: false
+updated_on: "2026-08-17"
+readiness_principle: evidence_before_score

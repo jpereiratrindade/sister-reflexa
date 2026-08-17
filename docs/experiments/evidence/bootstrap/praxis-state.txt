@@ -1,0 +1,5 @@
+praxis_mode=auto
+praxis_status=LICENSING_APPLIED
+praxis_home=/var/home/jpereiratrindade/.local/share/praxis/current
+praxis_commit=35ce447875e51a752715fe29ed37bf75e97bbd76
+runtime_dependency=false
