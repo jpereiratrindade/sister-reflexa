@@ -3,96 +3,176 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SisTer Reflexa</title>
+  <meta name="description" content="SisTer Reflexa — instrumento científico experimental para evidenciação de trajetórias sociotécnicas. READY / INCOMPLETE.">
+  <title>SisTer Reflexa — MVP-0</title>
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
 <header>
-  <div><small>SISTER · REFLEXIVIDADE EVIDENCIADA</small><h1>SisTer Reflexa</h1></div>
-  <div class="chips"><span id="health">carregando</span><span>sem score agregado</span><span id="model">modelo: —</span></div>
+  <div>
+    <small>SISTER · REFLEXIVIDADE EVIDENCIADA</small>
+    <h1>SisTer Reflexa</h1>
+  </div>
+  <div class="chips">
+    <span id="health" class="chip-status">carregando</span>
+    <span class="chip-warn">sem score agregado</span>
+    <span class="chip-incomplete">READY / INCOMPLETE</span>
+    <span id="model" class="chip-model">modelo: —</span>
+  </div>
 </header>
+
 <main>
+  <!-- Hero -->
   <section class="hero">
-    <div><h2>Da trajetória para a evidência</h2><p>Registre o antes, o evento, as alegações, o que as sustenta e como a leitura muda ao longo do tempo. O sistema não tenta adivinhar reflexividade por uma fórmula.</p></div>
-    <div class="principle">destino aberto<br><strong>passado preservado</strong><br>transição explicável</div>
+    <div>
+      <h2>Da trajetória para a evidência</h2>
+      <p>Registre o evento, adicione evidências com contribuições por dimensão, congele o bundle e execute a avaliação determinística. O sistema não agrega em score.</p>
+      <div class="epistemic-bar">
+        <span class="ep ep-obs">● Evidência observada</span>
+        <span class="ep ep-der">● Avaliação derivada</span>
+        <span class="ep ep-unk">○ Desconhecido / não demonstrado</span>
+      </div>
+    </div>
+    <div class="principle">
+      destino aberto<br><strong>passado preservado</strong><br>transição explicável<br>
+      <div class="ready-badge">READY / INCOMPLETE</div>
+    </div>
   </section>
 
+  <!-- Metrics -->
   <section class="metrics" id="metrics"></section>
 
+  <!-- Trajectory -->
   <section class="panel">
-    <div class="panel-head"><div><small>VISÃO GERAL</small><h2>Trajetória</h2></div><button onclick="refresh()">Atualizar</button></div>
+    <div class="panel-head">
+      <div><small>VISÃO GERAL</small><h2>Trajetória</h2></div>
+      <button id="btn-refresh" onclick="refresh()">Atualizar</button>
+    </div>
     <div id="trajectory" class="trajectory"></div>
   </section>
 
+  <!-- Two-column: Event + Evidence input -->
   <div class="grid two">
     <section class="panel">
-      <div class="panel-head"><div><small>ENTRADA</small><h2>Novo evento</h2></div></div>
-      <form data-endpoint="/api/events">
-        <label>Título<input name="title" required></label>
+      <div class="panel-head"><div><small>PASSO 1</small><h2>Novo evento</h2></div></div>
+      <form id="form-event" data-endpoint="/api/events">
+        <label>Título<input id="ev-title" name="title" required placeholder="Ex.: Dia de campo sobre manejo pastoril"></label>
         <label>Tipo<select name="type"><option>field_day</option><option>course</option><option>lecture</option><option>workshop</option><option>experiment</option><option>institutional_decision</option><option>other</option></select></label>
-        <label>Tempo válido<input name="valid_time" placeholder="2026-08-17 ou intervalo"></label>
+        <label>Tempo válido<input name="valid_time" placeholder="2026-08-18 ou intervalo"></label>
         <label>Contexto anterior<textarea name="context" required placeholder="O que precisamos preservar do ponto de partida para reconhecer mudança depois?"></textarea></label>
-        <button type="submit">Registrar sem sobrescrever</button>
+        <button type="submit">Registrar evento</button>
       </form>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><small>ALEGAÇÃO</small><h2>O que pode ter mudado?</h2></div></div>
-      <form data-endpoint="/api/claims">
-        <label>Evento<select name="event_id" class="event-select" required></select></label>
+      <div class="panel-head"><div><small>PASSO 2</small><h2>Alegação</h2></div></div>
+      <form id="form-claim" data-endpoint="/api/claims">
+        <label>Evento<select id="sel-event-claim" name="event_id" class="event-select" required></select></label>
         <label>Alegação<textarea name="text" required placeholder="Ex.: participantes alteraram a forma de decidir o manejo..."></textarea></label>
         <button type="submit">Registrar alegação</button>
       </form>
     </section>
   </div>
 
+  <!-- Evidence with contributions -->
+  <section class="panel">
+    <div class="panel-head">
+      <div><small>PASSO 3 · EVIDÊNCIA</small><h2>Adicionar evidência com contribuições</h2></div>
+      <span class="warning">contribuições são inferidas — não medidas</span>
+    </div>
+    <form id="form-evidence" data-endpoint="/api/evidence">
+      <div class="grid two">
+        <label>Alegação<select id="sel-claim-evd" name="claim_id" class="claim-select" required></select></label>
+        <label>Tipo<input name="kind" placeholder="document, interview, artifact, observation..."></label>
+      </div>
+      <div class="grid two">
+        <label>Tempo válido<input name="valid_time"></label>
+        <label>Fonte / referência<input name="source_ref" placeholder="arquivo, URL, ata, depoimento..."></label>
+      </div>
+      <label>Conteúdo / observação<textarea name="content" required placeholder="Descreva o que foi observado ou registrado..."></textarea></label>
+      <label>Digest opcional<input name="digest" placeholder="sha256:..."></label>
+
+      <div class="contrib-section">
+        <div class="contrib-head">
+          <strong>Contribuições por dimensão</strong>
+          <small class="experimental-note">PROVISIONAL · EXPERIMENTAL · NÃO VALIDADO CIENTIFICAMENTE</small>
+        </div>
+        <p class="contrib-note">Para cada dimensão relevante, indique suporte (−1 contradiz a 1 suporta) e confiança (0 a 1). Deixe em branco para dimensões sem informação.</p>
+        <div id="contrib-inputs" class="contrib-grid"></div>
+        <input type="hidden" name="contributions" id="hidden-contributions">
+      </div>
+      <button type="submit">Acrescentar evidência</button>
+    </form>
+  </section>
+
+  <!-- Freeze + Assess -->
   <div class="grid two">
     <section class="panel">
-      <div class="panel-head"><div><small>EVIDÊNCIA</small><h2>O que sustenta a alegação?</h2></div></div>
-      <form data-endpoint="/api/evidence">
-        <label>Alegação<select name="claim_id" class="claim-select" required></select></label>
-        <div class="grid two compact"><label>Tipo<input name="kind" placeholder="document, interview, artifact..."></label><label>Tempo válido<input name="valid_time"></label></div>
-        <label>Fonte / referência<input name="source_ref" placeholder="arquivo, URL interna, ata, depoimento..."></label>
-        <label>Digest opcional<input name="digest" placeholder="sha256:..."></label>
-        <label>Conteúdo / observação<textarea name="content" required></textarea></label>
-        <button type="submit">Acrescentar evidência</button>
-      </form>
+      <div class="panel-head"><div><small>PASSO 4</small><h2>Congelar bundle de evidência</h2></div></div>
+      <div class="bundle-form">
+        <label>Evento<select id="sel-event-bundle" class="event-select"></select></label>
+        <p class="contrib-note">Congela todas as evidências existentes para o evento neste momento. O bundle permanece imutável após a criação.</p>
+        <button id="btn-freeze" type="button" onclick="freezeBundle()">⟨ Congelar EvidenceBundle ⟩</button>
+        <div id="bundle-result" class="bundle-result hidden"></div>
+      </div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><small>LINHAGEM</small><h2>Relacionar entidades</h2></div></div>
-      <form data-endpoint="/api/relations">
-        <label>Origem<input name="from_id" required placeholder="evt-..., clm-..., evd-..."></label>
-        <label>Relação<select name="relation"><option>contributes_to</option><option>successor_of</option><option>supports</option><option>contests</option><option>derived_from</option><option>changes_next_cycle</option></select></label>
-        <label>Destino<input name="to_id" required></label>
-        <label>Tempo válido<input name="valid_time"></label>
-        <label>Nota<textarea name="note"></textarea></label>
-        <button type="submit">Criar aresta</button>
-      </form>
+      <div class="panel-head"><div><small>PASSO 5</small><h2>Avaliar bundle</h2></div></div>
+      <div class="bundle-form">
+        <label>Bundle<select id="sel-bundle-assess"></select></label>
+        <p class="contrib-note">Executa o avaliador determinístico (baseline v0.1) sobre o bundle congelado. O mesmo bundle produzirá sempre o mesmo vetor.</p>
+        <button id="btn-assess" type="button" onclick="assessBundle()">▶ Executar avaliador baseline</button>
+        <div id="assess-result" class="assess-result hidden"></div>
+      </div>
     </section>
   </div>
 
+  <!-- Process Vector display -->
+  <section class="panel" id="vector-panel">
+    <div class="panel-head">
+      <div><small>PASSO 6 · VETOR DE PROCESSO</small><h2>Resultado da avaliação</h2></div>
+      <span class="warning">PROVISIONAL · EXPERIMENTAL · NÃO VALIDADO CIENTIFICAMENTE</span>
+    </div>
+    <div id="vector-display" class="vector-empty">
+      <p class="ep ep-unk">○ Nenhuma avaliação ainda. Execute os passos 1–5 para ver o vetor.</p>
+    </div>
+    <div class="epistemic-note">
+      <strong>Nota epistêmica:</strong> Um valor como <code>exposure = 0.73</code> significa apenas que o avaliador determinístico experimental produziu 0.73 a partir deste conjunto de contribuições explicitamente codificadas. Não significa "73% de exposição ocorreu".
+    </div>
+  </section>
+
+  <!-- Records -->
   <section class="panel">
-    <div class="panel-head"><div><small>SNAPSHOT HUMANO · RUBRIC 0.1</small><h2>Avaliação evidenciada</h2></div><span class="warning">não agrega em IRE</span></div>
-    <form data-endpoint="/api/evaluations">
-      <div class="grid three compact"><label>Evento<select name="event_id" class="event-select" required></select></label><label>Veredito<select name="verdict"><option>INSUFFICIENT</option><option>EMERGENT</option><option>PARTIAL</option><option>STRONG</option><option>REFLEXIVE</option></select></label><label>Incerteza<select name="uncertainty"><option>HIGH</option><option>MED</option><option>LOW</option></select></label></div>
+    <div class="panel-head"><div><small>DO GERAL AO ESPECÍFICO</small><h2>Registros</h2></div></div>
+    <div id="records"></div>
+  </section>
+
+  <!-- Existing evaluations (human snapshots) -->
+  <section class="panel">
+    <div class="panel-head"><div><small>SNAPSHOT HUMANO · RUBRIC 0.1</small><h2>Avaliação evidenciada (qualitativa)</h2></div><span class="warning">não agrega em IRE</span></div>
+    <form id="form-evaluation" data-endpoint="/api/evaluations">
+      <div class="grid three compact">
+        <label>Evento<select name="event_id" class="event-select" required></select></label>
+        <label>Veredito<select name="verdict"><option>INSUFFICIENT</option><option>EMERGENT</option><option>PARTIAL</option><option>STRONG</option><option>REFLEXIVE</option></select></label>
+        <label>Incerteza<select name="uncertainty"><option>HIGH</option><option>MED</option><option>LOW</option></select></label>
+      </div>
       <div class="dimensions" id="dimensions"></div>
       <label>Síntese e limites<textarea name="summary" required placeholder="Explique por que esta avaliação é defensável e o que permanece não demonstrado."></textarea></label>
       <button type="submit">Congelar novo snapshot</button>
     </form>
   </section>
 
-  <section class="panel">
-    <div class="panel-head"><div><small>DO GERAL AO ESPECÍFICO</small><h2>Registros</h2></div></div>
-    <div id="records"></div>
-  </section>
-
+  <!-- TinyLM placeholder -->
   <section class="panel model-panel">
-    <div><small>MODELO 2 · CANDIDATO</small><h2>TinyReflexiveLM</h2><p id="model-note"></p></div>
-    <div><code>evidence bundle → causal LM → perfil + lacunas</code><p>O corpus nasce dos snapshots humanos versionados. Nenhuma equação de IRE é usada como professor oculto.</p></div>
+    <div><small>MODELO 2 · CANDIDATO · NÃO IMPLEMENTADO</small><h2>TinyReflexiveLM</h2><p id="model-note"></p></div>
+    <div><code>evidence bundle → causal LM → perfil + lacunas</code><p>O corpus nasce dos snapshots humanos versionados. Nenhuma equação de IRE é usada como professor oculto. <strong>Não disponível nesta fase.</strong></p></div>
   </section>
 </main>
-<footer>MVP-0 local · avaliação de trajetórias, não de pessoas · append-only</footer>
+
+<footer>
+  MVP-0 local · avaliação de trajetórias, não de pessoas · append-only · <strong>READY / INCOMPLETE</strong>
+</footer>
 <script src="/assets/app.js"></script>
 </body>
 </html>
