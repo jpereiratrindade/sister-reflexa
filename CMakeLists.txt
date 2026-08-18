@@ -54,4 +54,12 @@ if(BUILD_TESTING)
   # T_ADV2: adversarial — contribution mutation, digest unchanged (E001R)
   add_test(NAME T_ADV2_contrib_mutation COMMAND sister-reflexa --test-adversarial-contrib)
   set_tests_properties(T_ADV2_contrib_mutation PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
+
+  # T_ADV3: adversarial — load integrity (E001R-REV1)
+  add_test(NAME T_ADV3_load_integrity   COMMAND sister-reflexa --test-adversarial-load)
+  set_tests_properties(T_ADV3_load_integrity PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
+
+  # T_ADV4: adversarial — verification collision safety (E001R-REV1)
+  add_test(NAME T_ADV4_verify_collision COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_verify_collision.sh)
+  set_tests_properties(T_ADV4_verify_collision PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
 endif()

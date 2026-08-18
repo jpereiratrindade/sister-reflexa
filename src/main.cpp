@@ -61,6 +61,7 @@ struct EvidenceBundle {
     std::string evidence_count; // stored as string for TSV simplicity
     std::string content_digest; // sha256: prefix + hex
     std::string snapshot;       // canonical frozen evidence block (percent-encoded)
+    std::string integrity_status; // "valid", "corrupt", "legacy-fnv1a", "unknown"
 };
 
 // Assessment — deterministic-baseline result bound to a bundle
@@ -268,8 +269,10 @@ std::string serialise_snapshot(const std::vector<Evidence>& items) {
 }
 
 // ---------------------------------------------------------------------------
-// Verify bundle digest (E001R: OBS-2 repair)
-// Throws IntegrityError if stored digest does not match snapshot content.
+// Verify bundle digest (E001R-REV1: OBS-REV1-2 repair)
+// Checks the load-time integrity status. Throws IntegrityError if corrupt or unknown.
+// Allows historical legacy-fnv1a to exist, but maybe blocks assessment? Wait, the MVP requirements 
+// state legacy bundles shouldn't be assessed by the new algorithm. Let's explicitly require "valid".
 // ---------------------------------------------------------------------------
 
 struct IntegrityError : std::runtime_error {
@@ -277,13 +280,19 @@ struct IntegrityError : std::runtime_error {
 };
 
 void verify_bundle_digest(const EvidenceBundle& b) {
-    auto expected = sha256_hex(b.snapshot);
-    if (b.content_digest != expected) {
+    if (b.integrity_status == "corrupt") {
         throw IntegrityError(
             "INTEGRITY_VIOLATION: bundle " + b.bundle_id +
             " stored digest=" + b.content_digest +
-            " computed=" + expected +
-            " — snapshot has been modified or digest is stale");
+            " does not match snapshot bytes — corruption detected on load.");
+    }
+    if (b.integrity_status == "legacy-fnv1a") {
+        throw IntegrityError(
+            "LEGACY_BUNDLE: bundle " + b.bundle_id +
+            " uses legacy fnv1a64 protocol and cannot be assessed by the current SHA-256 standard.");
+    }
+    if (b.integrity_status != "valid") {
+        throw IntegrityError("INTEGRITY_VIOLATION: bundle " + b.bundle_id + " has invalid or missing integrity status.");
     }
 }
 
@@ -474,7 +483,22 @@ public:
     std::vector<EvidenceBundle> bundles() const {
         std::vector<EvidenceBundle> out;
         for (auto& v: rows("bundles.tsv")) {
-            if(v.size()>=6) out.push_back({v[0],v[1],v[2],v[3],v[4],v[5]});
+            if(v.size()>=6) {
+                EvidenceBundle b{v[0], v[1], v[2], v[3], v[4], v[5], ""};
+                // REV1: Verify integrity at load time
+                if (b.content_digest.rfind("sha256:", 0) == 0) {
+                    if (b.content_digest == sha256_hex(b.snapshot)) {
+                        b.integrity_status = "valid";
+                    } else {
+                        b.integrity_status = "corrupt";
+                    }
+                } else if (b.content_digest.rfind("fnv1a64:", 0) == 0) {
+                    b.integrity_status = "legacy-fnv1a";
+                } else {
+                    b.integrity_status = "unknown";
+                }
+                out.push_back(std::move(b));
+            }
         }
         return out;
     }
@@ -514,7 +538,7 @@ public:
         o << "],\"evaluations\":["; auto ev=evaluations();
         for(size_t i=0;i<ev.size();++i){if(i)o<<',';auto& x=ev[i];o<<"{\"id\":\""<<json_escape(x.id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"verdict\":\""<<json_escape(x.verdict)<<"\",\"T\":\""<<json_escape(x.t)<<"\",\"E\":\""<<json_escape(x.e)<<"\",\"D\":\""<<json_escape(x.d)<<"\",\"K\":\""<<json_escape(x.k)<<"\",\"A\":\""<<json_escape(x.a)<<"\",\"R\":\""<<json_escape(x.r)<<"\",\"P\":\""<<json_escape(x.p)<<"\",\"F\":\""<<json_escape(x.f)<<"\",\"uncertainty\":\""<<json_escape(x.uncertainty)<<"\",\"summary\":\""<<json_escape(x.summary)<<"\",\"rubric\":\""<<json_escape(x.rubric)<<"\",\"registered_at\":\""<<json_escape(x.registered_at)<<"\"}";}
         o << "],\"bundles\":["; auto bs=bundles();
-        for(size_t i=0;i<bs.size();++i){if(i)o<<',';auto& x=bs[i];o<<"{\"bundle_id\":\""<<json_escape(x.bundle_id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"created_at\":\""<<json_escape(x.created_at)<<"\",\"evidence_count\":"<<json_escape(x.evidence_count)<<",\"content_digest\":\""<<json_escape(x.content_digest)<<"\"}";}
+        for(size_t i=0;i<bs.size();++i){if(i)o<<',';auto& x=bs[i];o<<"{\"bundle_id\":\""<<json_escape(x.bundle_id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"created_at\":\""<<json_escape(x.created_at)<<"\",\"evidence_count\":"<<json_escape(x.evidence_count)<<",\"content_digest\":\""<<json_escape(x.content_digest)<<"\",\"integrity_status\":\""<<json_escape(x.integrity_status)<<"\"}";}
         o << "],\"assessments\":["; auto as=assessments();
         for(size_t i=0;i<as.size();++i){if(i)o<<',';auto& x=as[i];o<<"{\"assessment_id\":\""<<json_escape(x.assessment_id)<<"\",\"bundle_id\":\""<<json_escape(x.bundle_id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"evaluator\":\""<<json_escape(x.evaluator)<<"\",\"assessed_at\":\""<<json_escape(x.assessed_at)<<"\",\"bundle_digest\":\""<<json_escape(x.bundle_digest)<<"\",\"evaluator_spec_digest\":\""<<json_escape(x.evaluator_spec_digest)<<"\",\"vector\":{\"exposure\":"<<x.exposure<<",\"interaction\":"<<x.interaction<<",\"appropriation\":"<<x.appropriation<<",\"incorporation\":"<<x.incorporation<<",\"propagation\":"<<x.propagation<<",\"reflexivity\":"<<x.reflexivity<<",\"stabilization\":"<<x.stabilization<<"},\"status\":\""<<json_escape(x.status)<<"\"}";}
         o << "]}";
@@ -531,6 +555,7 @@ public:
               << "\",\"created_at\":\"" << json_escape(b.created_at)
               << "\",\"evidence_count\":" << json_escape(b.evidence_count)
               << ",\"content_digest\":\"" << json_escape(b.content_digest)
+              << "\",\"integrity_status\":\"" << json_escape(b.integrity_status)
               << "\",\"snapshot\":\"" << json_escape(b.snapshot) << "\"}";
             return o.str();
         }
@@ -566,7 +591,7 @@ public:
             if(b.event_id!=event_id)continue;
             if(!first) o<<',';
             first=false;
-            o<<"{\"bundle_id\":\""<<json_escape(b.bundle_id)<<"\",\"created_at\":\""<<json_escape(b.created_at)<<"\",\"evidence_count\":"<<json_escape(b.evidence_count)<<",\"content_digest\":\""<<json_escape(b.content_digest)<<"\"}";
+            o<<"{\"bundle_id\":\""<<json_escape(b.bundle_id)<<"\",\"created_at\":\""<<json_escape(b.created_at)<<"\",\"evidence_count\":"<<json_escape(b.evidence_count)<<",\"content_digest\":\""<<json_escape(b.content_digest)<<"\",\"integrity_status\":\""<<json_escape(b.integrity_status)<<"\"}";
         }
         o << "],\"assessments\":["; first=true;
         for (auto& a : all_asr) {
@@ -1149,6 +1174,61 @@ int test_adversarial_contribution_mutation() {
     std::cout<<"T_ADV2 adversarial-contribution-mutation PASS\n"; return 0;
 }
 
+// T_ADV3: adversarial — load integrity (E001R-REV1)
+// Expected: corruption detected during load; bundle not accepted as valid.
+int test_adversarial_load_integrity() {
+    auto root=fs::temp_directory_path()/"sister-reflexa-tadv3"; fs::remove_all(root);
+    std::string bnd_id;
+    {
+        Store s(root);
+        auto evt=s.add_event({{"title","ADV3 Event"},{"type","test"}});
+        auto clm=s.add_claim({{"event_id",evt},{"text","ADV3 claim"}});
+        s.add_evidence({{"claim_id",clm},{"content","loadIntegrityContent"},{"contributions","exposure:0.1:1.0"}});
+        bnd_id = s.freeze_bundle(evt);
+    } // store closes
+
+    auto bundle_path = root/"bundles.tsv";
+    std::string raw;
+    {
+        std::ifstream f(bundle_path, std::ios::binary);
+        std::ostringstream ss; ss << f.rdbuf(); raw = ss.str();
+    }
+    // Mutate snapshot content
+    auto it = raw.find("loadIntegrityContent");
+    if (it == std::string::npos) { std::cerr<<"ADV3: content not found in TSV\n"; return 2; }
+    raw.replace(it, 20, "loadIntegrityMUTATED"); 
+    {
+        std::ofstream f(bundle_path, std::ios::binary | std::ios::trunc);
+        f << raw;
+    }
+
+    // Reload store
+    Store s2(root);
+    auto bs = s2.bundles();
+    bool found = false;
+    for (auto& b : bs) {
+        if (b.bundle_id == bnd_id) {
+            found = true;
+            if (b.integrity_status != "corrupt") {
+                std::cerr<<"ADV3: bundle not marked corrupt on load. Status: " << b.integrity_status << "\n"; return 3;
+            }
+            break;
+        }
+    }
+    if (!found) { std::cerr<<"ADV3: bundle disappeared\n"; return 4; }
+
+    bool caught = false;
+    try {
+        s2.assess_bundle(bnd_id);
+    } catch (const IntegrityError&) {
+        caught = true;
+    }
+    if (!caught) { std::cerr<<"ADV3: assess_bundle accepted corrupt bundle\n"; return 5; }
+
+    fs::remove_all(root);
+    std::cout<<"T_ADV3 adversarial-load-integrity PASS\n"; return 0;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -1169,6 +1249,7 @@ int main(int argc, char** argv) {
         if(argc==2 && std::string_view(argv[1])=="--test-api-slice") return test_api_slice();
         if(argc==2 && std::string_view(argv[1])=="--test-adversarial-byte") return test_adversarial_byte_mutation();
         if(argc==2 && std::string_view(argv[1])=="--test-adversarial-contrib") return test_adversarial_contribution_mutation();
+        if(argc==2 && std::string_view(argv[1])=="--test-adversarial-load") return test_adversarial_load_integrity();
         if(argc==2 && std::string_view(argv[1])=="--test-web") {
             // Project root is two levels up from binary (build/sister-reflexa → .)
             fs::path project_root = binary_path.parent_path();
@@ -1190,6 +1271,7 @@ int main(int argc, char** argv) {
                    "  sister-reflexa --test-api-slice\n"
                    "  sister-reflexa --test-adversarial-byte\n"
                    "  sister-reflexa --test-adversarial-contrib\n"
+                   "  sister-reflexa --test-adversarial-load\n"
                    "  sister-reflexa --test-web\n"
                    "  sister-reflexa --serve [host] [port]\n"; return 0;
     } catch(const std::exception& e) { std::cerr<<"ERROR: "<<e.what()<<'\n'; return 1; }

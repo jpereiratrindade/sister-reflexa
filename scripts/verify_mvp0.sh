@@ -8,10 +8,11 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Generate a unique run ID from UTC timestamp
-RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-RUN_DIR="docs/experiments/evidence/bootstrap/runs/${RUN_ID}"
-mkdir -p "${RUN_DIR}"
+# Generate a unique run ID from UTC timestamp and random suffix (atomically collision-safe)
+RUN_PREFIX="$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "docs/experiments/evidence/bootstrap/runs"
+RUN_DIR=$(mktemp -d "docs/experiments/evidence/bootstrap/runs/${RUN_PREFIX}-XXXXXX")
+RUN_ID=$(basename "${RUN_DIR}")
 
 {
   echo "=== SisTer Reflexa MVP-0 verification ==="
