@@ -1,0 +1,9 @@
+run_id=20260818T104944Z-1ORknV
+verified_commit=d0041bf695a7d29e548c71bc0e420052ed2ce909
+pre_run_git_state=CLEAN
+gate=scripts/verify_mvp0.sh
+praxis_validator_commit=41d156b0a2095389e0275c954e31a41f3ce50868
+verification_sha256=8e9506c551cf2f3cd2992fe81435d5b61ab1fc81e40aed34d9e83c2ab684bc01
+generated_on=2026-08-18T07:49:44-03:00
+host=sister-gateway
+purpose=MVP-0 canonical governance closure

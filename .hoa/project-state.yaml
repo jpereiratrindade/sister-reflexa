@@ -5,12 +5,12 @@ bootstrap_script: scripts/bootstrap_project.sh
 bootstrap_policy: create_once
 phase: MVP-0
 status: active
-last_verified_milestone: BOOTSTRAP
-last_verified_commit: "0000000"
+last_verified_milestone: MVP-0
+last_verified_commit: "d0041bf695a7d29e548c71bc0e420052ed2ce909"
 last_verified_gate: scripts/verify_mvp0.sh
-last_verified_evidence: docs/experiments/evidence/bootstrap/verification.txt
+last_verified_evidence: docs/experiments/evidence/bootstrap/runs/20260818T104944Z-1ORknV/verification.txt
 next_milestone: TRLM-E001
 next_milestone_status: proposed
 next_milestone_authorized: false
-updated_on: "2026-08-17"
+updated_on: "2026-08-18"
 readiness_principle: evidence_before_score
