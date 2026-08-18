@@ -1,0 +1,47 @@
+=== SisTer Reflexa MVP-0 verification ===
+run_id: 20260818T020556Z-I5YvNF
+UTC: 2026-08-18T02:05:56Z
+root: /home/jpereiratrindade/dev/cpp/sister-reflexa
+
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/jpereiratrindade/dev/cpp/sister-reflexa/build
+ninja: no work to do.
+Test project /home/jpereiratrindade/dev/cpp/sister-reflexa/build
+      Start  1: sister_reflexa_self_test
+ 1/12 Test  #1: sister_reflexa_self_test .........   Passed    0.00 sec
+      Start  2: sister_reflexa_status
+ 2/12 Test  #2: sister_reflexa_status ............   Passed    0.00 sec
+      Start  3: T2_bundle_creation
+ 3/12 Test  #3: T2_bundle_creation ...............   Passed    0.00 sec
+      Start  4: T3_temporal
+ 4/12 Test  #4: T3_temporal ......................   Passed    0.01 sec
+      Start  5: T4_deterministic
+ 5/12 Test  #5: T4_deterministic .................   Passed    0.01 sec
+      Start  6: T5_restart
+ 6/12 Test  #6: T5_restart .......................   Passed    0.01 sec
+      Start  7: T6_api_slice
+ 7/12 Test  #7: T6_api_slice .....................   Passed    0.01 sec
+      Start  8: T7_web
+ 8/12 Test  #8: T7_web ...........................   Passed    0.20 sec
+      Start  9: T_ADV1_byte_mutation
+ 9/12 Test  #9: T_ADV1_byte_mutation .............   Passed    0.01 sec
+      Start 10: T_ADV2_contrib_mutation
+10/12 Test #10: T_ADV2_contrib_mutation ..........   Passed    0.01 sec
+      Start 11: T_ADV3_load_integrity
+11/12 Test #11: T_ADV3_load_integrity ............   Passed    0.00 sec
+      Start 12: T_ADV4_verify_collision
+12/12 Test #12: T_ADV4_verify_collision ..........   Passed    0.03 sec
+
+100% tests passed, 0 tests failed out of 12
+
+Total Test time (real) =   0.29 sec
+
+SisTer Reflexa
+core=READY
+completeness=INCOMPLETE
+phase=MVP-0
+model=NOT_TRAINED
+score_policy=NO_AGGREGATE_SCORE
+
+MVP-0: PASS
