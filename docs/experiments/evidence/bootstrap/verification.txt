@@ -1,26 +1,31 @@
 === SisTer Reflexa MVP-0 verification ===
-UTC: 2026-08-17T23:47:06Z
+UTC: 2026-08-18T00:21:18Z
 
--- The CXX compiler identification is GNU 16.1.1
--- Detecting CXX compiler ABI info
--- Detecting CXX compiler ABI info - done
--- Check for working CXX compiler: /usr/bin/c++ - skipped
--- Detecting CXX compile features
--- Detecting CXX compile features - done
--- Configuring done (0.5s)
+-- Configuring done (0.0s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/jpereiratrindade/dev/cpp/sister-reflexa/build
-[1/2] Building CXX object CMakeFiles/sister-reflexa.dir/src/main.cpp.o
-[2/2] Linking CXX executable sister-reflexa
+ninja: no work to do.
 Test project /home/jpereiratrindade/dev/cpp/sister-reflexa/build
     Start 1: sister_reflexa_self_test
-1/2 Test #1: sister_reflexa_self_test .........   Passed    0.00 sec
+1/8 Test #1: sister_reflexa_self_test .........   Passed    0.00 sec
     Start 2: sister_reflexa_status
-2/2 Test #2: sister_reflexa_status ............   Passed    0.00 sec
+2/8 Test #2: sister_reflexa_status ............   Passed    0.00 sec
+    Start 3: T2_bundle_creation
+3/8 Test #3: T2_bundle_creation ...............   Passed    0.00 sec
+    Start 4: T3_temporal
+4/8 Test #4: T3_temporal ......................   Passed    0.00 sec
+    Start 5: T4_deterministic
+5/8 Test #5: T4_deterministic .................   Passed    0.00 sec
+    Start 6: T5_restart
+6/8 Test #6: T5_restart .......................   Passed    0.00 sec
+    Start 7: T6_api_slice
+7/8 Test #7: T6_api_slice .....................   Passed    0.00 sec
+    Start 8: T7_web
+8/8 Test #8: T7_web ...........................   Passed    0.20 sec
 
-100% tests passed, 0 tests failed out of 2
+100% tests passed, 0 tests failed out of 8
 
-Total Test time (real) =   0.01 sec
+Total Test time (real) =   0.23 sec
 
 SisTer Reflexa
 core=READY

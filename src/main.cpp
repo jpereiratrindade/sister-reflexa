@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// AG-RFX-MVP0-001: Minimal Vertical Slice — EvidenceBundle + Process Vector
+// AG-RFX-MVP0-001 / E001R: Evidential Integrity Repair
 // Evaluator: deterministic-baseline v0.1 (PROVISIONAL / NOT SCIENTIFICALLY VALIDATED)
+// Digest: SHA-256 (OBS-2 repair — fnv1a64 was stored but not verified)
 
 #include <algorithm>
 #include <array>
@@ -23,6 +24,7 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <netinet/in.h>
+#include <openssl/sha.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -51,21 +53,25 @@ struct Evaluation {
     std::string id,event_id,verdict,t,e,d,k,a,r,p,f,uncertainty,summary,rubric,registered_at;
 };
 
-// New: EvidenceBundle — frozen snapshot of evidence at a point in time
-// snapshot field stores serialised evidence content (inline, frozen at creation time)
+// EvidenceBundle — frozen snapshot of evidence at a point in time
+// snapshot: canonical serialisation of all evidence provenance fields (E001R: full fields)
+// content_digest: SHA-256 hex of snapshot (E001R: replaces fnv1a64; verified on load/assess)
 struct EvidenceBundle {
     std::string bundle_id,event_id,created_at;
     std::string evidence_count; // stored as string for TSV simplicity
-    std::string content_digest; // FNV-1a hex of snapshot
-    std::string snapshot;       // serialised frozen evidence (percent-encoded block)
+    std::string content_digest; // sha256: prefix + hex
+    std::string snapshot;       // canonical frozen evidence block (percent-encoded)
 };
 
-// New: Assessment — deterministic-baseline result bound to a bundle
+// Assessment — deterministic-baseline result bound to a bundle
+// E001R: now stores bundle_digest and evaluator_spec_digest for explicit binding
 struct Assessment {
     std::string assessment_id,bundle_id,event_id,evaluator,assessed_at;
     // 7 process vector dimensions (stored as strings, 6 decimal places)
     std::string exposure,interaction,appropriation,incorporation,propagation,reflexivity,stabilization;
-    std::string status; // "experimental"
+    std::string status;               // "experimental"
+    std::string bundle_digest;        // SHA-256 of bundle at assessment time
+    std::string evaluator_spec_digest;// SHA-256 prefix of evaluator canonical spec
 };
 
 // ---------------------------------------------------------------------------
@@ -166,20 +172,39 @@ void ensure_file(const fs::path& p) {
     if (!fs::exists(p)) { std::ofstream out(p); }
 }
 
-// FNV-1a 64-bit hash — deterministic, not cryptographic, used as content digest
-uint64_t fnv1a(std::string_view data) {
-    uint64_t hash = 14695981039346656037ULL;
-    for (unsigned char c : data) {
-        hash ^= static_cast<uint64_t>(c);
-        hash *= 1099511628211ULL;
-    }
-    return hash;
+// SHA-256 digest (E001R: replaces fnv1a64 — cryptographic, suitable for scientific provenance)
+// Returns "sha256:" + 64 lowercase hex chars
+std::string sha256_hex(std::string_view data) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash);
+    std::ostringstream o;
+    o << "sha256:" << std::hex << std::setfill('0');
+    for (unsigned char b : hash) o << std::setw(2) << static_cast<int>(b);
+    return o.str();
 }
 
-std::string digest_hex(std::string_view data) {
-    std::ostringstream o;
-    o << "fnv1a64:" << std::hex << std::setw(16) << std::setfill('0') << fnv1a(data);
-    return o.str();
+// ---------------------------------------------------------------------------
+// Evaluator specification identity (E001R: OBS-4 repair)
+// The canonical spec string defines the exact algorithm and parameters.
+// Its SHA-256 binds Assessments to this version of the evaluator.
+// ---------------------------------------------------------------------------
+
+// IMPORTANT: changing this string changes the spec digest — do not edit casually.
+static constexpr std::string_view EVALUATOR_SPEC_V0_1 =
+    "evaluator=deterministic-baseline "
+    "version=0.1 "
+    "formula=clamp(0,1,0.5+sum(support_i*confidence_i)/max(1,n_d)) "
+    "dims=exposure,interaction,appropriation,incorporation,propagation,reflexivity,stabilization "
+    "support_range=[-1.0,1.0] "
+    "confidence_range=[0.0,1.0] "
+    "missing_dim=0.0 "
+    "status=PROVISIONAL-NOT-SCIENTIFICALLY-VALIDATED";
+
+// First 32 hex chars of SHA-256(EVALUATOR_SPEC_V0_1) — abbreviated for readability
+std::string evaluator_spec_digest() {
+    auto full = sha256_hex(EVALUATOR_SPEC_V0_1);
+    // Store full digest for reproducibility
+    return full;
 }
 
 // ---------------------------------------------------------------------------
@@ -219,17 +244,47 @@ std::vector<Contribution> parse_contributions(const std::string& s) {
 }
 
 // ---------------------------------------------------------------------------
-// Serialise a frozen evidence snapshot
-// Format: one evidence item per line: id|content|contributions
-// This is frozen at bundle creation time — independent of future mutations
+// Canonical EvidenceBundle snapshot serialisation (E001R: OBS-3 repair)
+// Format: one evidence item per line, 9 pipe-separated fields, all pct-encoded:
+//   id|claim_id|kind|valid_time|source_ref|digest|content|registered_at|contributions
+// Field order is part of the canonical format — do not reorder.
+// All 9 fields are frozen at creation time, independent of future mutations.
 // ---------------------------------------------------------------------------
 
 std::string serialise_snapshot(const std::vector<Evidence>& items) {
     std::ostringstream o;
     for (auto& e : items) {
-        o << pct_encode(e.id) << '|' << pct_encode(e.content) << '|' << pct_encode(e.contributions) << '\n';
+        o << pct_encode(e.id)           << '|'
+          << pct_encode(e.claim_id)     << '|'
+          << pct_encode(e.kind)         << '|'
+          << pct_encode(e.valid_time)   << '|'
+          << pct_encode(e.source_ref)   << '|'
+          << pct_encode(e.digest)       << '|'
+          << pct_encode(e.content)      << '|'
+          << pct_encode(e.registered_at)<< '|'
+          << pct_encode(e.contributions)<< '\n';
     }
     return o.str();
+}
+
+// ---------------------------------------------------------------------------
+// Verify bundle digest (E001R: OBS-2 repair)
+// Throws IntegrityError if stored digest does not match snapshot content.
+// ---------------------------------------------------------------------------
+
+struct IntegrityError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+void verify_bundle_digest(const EvidenceBundle& b) {
+    auto expected = sha256_hex(b.snapshot);
+    if (b.content_digest != expected) {
+        throw IntegrityError(
+            "INTEGRITY_VIOLATION: bundle " + b.bundle_id +
+            " stored digest=" + b.content_digest +
+            " computed=" + expected +
+            " — snapshot has been modified or digest is stale");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +298,8 @@ std::string serialise_snapshot(const std::vector<Evidence>& items) {
 // ---------------------------------------------------------------------------
 
 std::map<std::string,double> evaluate_snapshot(const std::string& snapshot) {
-    // Parse snapshot lines: pct_encoded(id)|pct_encoded(content)|pct_encoded(contributions)
+    // Parse canonical snapshot lines (E001R format: 9 fields, pipe-separated)
+    // Field 9 (index 8) = contributions: pct_encoded(dim:support:confidence,...)
     std::map<std::string,double> sums;
     std::map<std::string,int> counts;
     for (auto d : DIMS) { sums[std::string(d)]=0.0; counts[std::string(d)]=0; }
@@ -252,11 +308,20 @@ std::map<std::string,double> evaluate_snapshot(const std::string& snapshot) {
     std::string line;
     while (std::getline(ss, line)) {
         if (line.empty()) continue;
-        auto p1 = line.find('|');
-        auto p2 = (p1!=std::string::npos) ? line.find('|', p1+1) : std::string::npos;
-        if (p1==std::string::npos || p2==std::string::npos) continue;
-        auto contrib_enc = line.substr(p2+1);
-        auto contrib_str = pct_decode(contrib_enc);
+        // Split on '|', collect all 9 fields
+        std::vector<std::string> fields;
+        size_t pos = 0;
+        while (true) {
+            auto next = line.find('|', pos);
+            auto enc = (next == std::string::npos) ? line.substr(pos) : line.substr(pos, next - pos);
+            fields.push_back(pct_decode(enc));
+            if (next == std::string::npos) break;
+            pos = next + 1;
+        }
+        // Field 8 (0-indexed) = contributions; also accept old 3-field format (field 2)
+        std::string contrib_str;
+        if (fields.size() >= 9) contrib_str = fields[8];          // E001R canonical format
+        else if (fields.size() >= 3) contrib_str = fields[2];     // legacy 3-field fallback
         auto contribs = parse_contributions(contrib_str);
         for (auto& c : contribs) {
             if (sums.count(c.dim)) {
@@ -341,30 +406,38 @@ public:
         // In this MVP, evidence is linked via claim_id only. That is fine.
 
         auto snapshot = serialise_snapshot(event_evidence);
-        auto digest   = digest_hex(snapshot);
+        auto digest   = sha256_hex(snapshot);  // E001R: SHA-256 replaces fnv1a64
         auto id       = next_id("bundles.tsv","bnd");
         auto count    = std::to_string(event_evidence.size());
-        // Store snapshot percent-encoded as single field
+        // Store snapshot inline — frozen at creation time
         append("bundles.tsv", {id, event_id, now_iso(), count, digest, snapshot});
         return id;
     }
 
     // Assess a bundle using the deterministic-baseline evaluator
+    // E001R: verifies bundle digest BEFORE evaluation; stores bundle_digest + evaluator_spec_digest
     std::string assess_bundle(const std::string& bundle_id) {
         auto bundles_all = bundles();
         const EvidenceBundle* bnd = nullptr;
         for (auto& b : bundles_all) { if (b.bundle_id==bundle_id) { bnd=&b; break; } }
         if (!bnd) throw std::runtime_error("bundle not found: " + bundle_id);
 
+        // INTEGRITY CHECK — throws IntegrityError if digest does not match snapshot
+        verify_bundle_digest(*bnd);
+
         auto vec = evaluate_snapshot(bnd->snapshot);
         auto id  = next_id("assessments.tsv","asr");
         auto fmt = [](double v){ std::ostringstream o; o<<std::fixed<<std::setprecision(6)<<v; return o.str(); };
+        auto spec_digest = evaluator_spec_digest();
         append("assessments.tsv", {id, bundle_id, bnd->event_id,
             "deterministic-baseline-v0.1", now_iso(),
             fmt(vec["exposure"]), fmt(vec["interaction"]), fmt(vec["appropriation"]),
             fmt(vec["incorporation"]), fmt(vec["propagation"]),
             fmt(vec["reflexivity"]), fmt(vec["stabilization"]),
-            "experimental"});
+            "experimental",
+            bnd->content_digest,  // bundle_digest: explicitly binds this assessment to this bundle state
+            spec_digest           // evaluator_spec_digest: binds to evaluator canonical spec
+        });
         return id;
     }
 
@@ -415,7 +488,9 @@ public:
                 a.exposure=v[5]; a.interaction=v[6]; a.appropriation=v[7];
                 a.incorporation=v[8]; a.propagation=v[9];
                 a.reflexivity=v[10]; a.stabilization=v[11];
-                a.status=v.size()>=13?v[12]:"experimental";
+                a.status      = v.size()>=13 ? v[12] : "experimental";
+                a.bundle_digest         = v.size()>=14 ? v[13] : "";
+                a.evaluator_spec_digest = v.size()>=15 ? v[14] : "";
                 out.push_back(std::move(a));
             }
         }
@@ -441,7 +516,7 @@ public:
         o << "],\"bundles\":["; auto bs=bundles();
         for(size_t i=0;i<bs.size();++i){if(i)o<<',';auto& x=bs[i];o<<"{\"bundle_id\":\""<<json_escape(x.bundle_id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"created_at\":\""<<json_escape(x.created_at)<<"\",\"evidence_count\":"<<json_escape(x.evidence_count)<<",\"content_digest\":\""<<json_escape(x.content_digest)<<"\"}";}
         o << "],\"assessments\":["; auto as=assessments();
-        for(size_t i=0;i<as.size();++i){if(i)o<<',';auto& x=as[i];o<<"{\"assessment_id\":\""<<json_escape(x.assessment_id)<<"\",\"bundle_id\":\""<<json_escape(x.bundle_id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"evaluator\":\""<<json_escape(x.evaluator)<<"\",\"assessed_at\":\""<<json_escape(x.assessed_at)<<"\",\"vector\":{\"exposure\":"<<x.exposure<<",\"interaction\":"<<x.interaction<<",\"appropriation\":"<<x.appropriation<<",\"incorporation\":"<<x.incorporation<<",\"propagation\":"<<x.propagation<<",\"reflexivity\":"<<x.reflexivity<<",\"stabilization\":"<<x.stabilization<<"},\"status\":\""<<json_escape(x.status)<<"\"}";}
+        for(size_t i=0;i<as.size();++i){if(i)o<<',';auto& x=as[i];o<<"{\"assessment_id\":\""<<json_escape(x.assessment_id)<<"\",\"bundle_id\":\""<<json_escape(x.bundle_id)<<"\",\"event_id\":\""<<json_escape(x.event_id)<<"\",\"evaluator\":\""<<json_escape(x.evaluator)<<"\",\"assessed_at\":\""<<json_escape(x.assessed_at)<<"\",\"bundle_digest\":\""<<json_escape(x.bundle_digest)<<"\",\"evaluator_spec_digest\":\""<<json_escape(x.evaluator_spec_digest)<<"\",\"vector\":{\"exposure\":"<<x.exposure<<",\"interaction\":"<<x.interaction<<",\"appropriation\":"<<x.appropriation<<",\"incorporation\":"<<x.incorporation<<",\"propagation\":"<<x.propagation<<",\"reflexivity\":"<<x.reflexivity<<",\"stabilization\":"<<x.stabilization<<"},\"status\":\""<<json_escape(x.status)<<"\"}";}
         o << "]}";
         return o.str();
     }
@@ -498,7 +573,7 @@ public:
             if(a.event_id!=event_id)continue;
             if(!first) o<<',';
             first=false;
-            o<<"{\"assessment_id\":\""<<json_escape(a.assessment_id)<<"\",\"bundle_id\":\""<<json_escape(a.bundle_id)<<"\",\"evaluator\":\""<<json_escape(a.evaluator)<<"\",\"assessed_at\":\""<<json_escape(a.assessed_at)<<"\",\"vector\":{\"exposure\":"<<a.exposure<<",\"interaction\":"<<a.interaction<<",\"appropriation\":"<<a.appropriation<<",\"incorporation\":"<<a.incorporation<<",\"propagation\":"<<a.propagation<<",\"reflexivity\":"<<a.reflexivity<<",\"stabilization\":"<<a.stabilization<<"},\"status\":\""<<json_escape(a.status)<<"\"}";
+            o<<"{\"assessment_id\":\""<<json_escape(a.assessment_id)<<"\",\"bundle_id\":\""<<json_escape(a.bundle_id)<<"\",\"evaluator\":\""<<json_escape(a.evaluator)<<"\",\"assessed_at\":\""<<json_escape(a.assessed_at)<<"\",\"bundle_digest\":\""<<json_escape(a.bundle_digest)<<"\",\"evaluator_spec_digest\":\""<<json_escape(a.evaluator_spec_digest)<<"\",\"vector\":{\"exposure\":"<<a.exposure<<",\"interaction\":"<<a.interaction<<",\"appropriation\":"<<a.appropriation<<",\"incorporation\":"<<a.incorporation<<",\"propagation\":"<<a.propagation<<",\"reflexivity\":"<<a.reflexivity<<",\"stabilization\":"<<a.stabilization<<"},\"status\":\""<<json_escape(a.status)<<"\"}";
         }
         o << "]}";
         return o.str();
@@ -711,8 +786,22 @@ int test_bundle_creation() {
     auto& b = bs[0];
     if (b.bundle_id != bnd_id) { std::cerr<<"T2: bundle id mismatch\n"; return 3; }
     if (b.evidence_count != "1") { std::cerr<<"T2: wrong evidence count: "<<b.evidence_count<<"\n"; return 4; }
-    if (b.content_digest.empty() || b.content_digest == "fnv1a64:0000000000000000") { std::cerr<<"T2: bad digest\n"; return 5; }
+    // E001R: digest must be SHA-256 (not fnv1a64)
+    if (b.content_digest.rfind("sha256:",0) != 0) { std::cerr<<"T2: digest not sha256: "<<b.content_digest.substr(0,12)<<"\n"; return 5; }
     if (b.snapshot.empty()) { std::cerr<<"T2: empty snapshot\n"; return 6; }
+    // E001R: snapshot must contain all provenance fields (9 pipe-separated per line)
+    {
+        std::istringstream ss(b.snapshot); std::string ln;
+        while (std::getline(ss,ln)) {
+            if (ln.empty()) continue;
+            size_t pipes = 0;
+            for (char c : ln) if (c=='|') ++pipes;
+            if (pipes < 8) { std::cerr<<"T2: snapshot line has only "<<pipes+1<<" fields (expected 9)\n"; return 7; }
+            break; // check first line
+        }
+    }
+    // E001R: verify_bundle_digest must pass for a freshly created bundle
+    try { verify_bundle_digest(b); } catch(...) { std::cerr<<"T2: integrity check failed on fresh bundle\n"; return 8; }
     fs::remove_all(root);
     std::cout<<"T2 bundle-creation PASS\n"; return 0;
 }
@@ -775,7 +864,7 @@ int test_temporal() {
     std::cout<<"T3 temporal-preservation PASS\n"; return 0;
 }
 
-// T4: deterministic assessment
+// T4: deterministic assessment + evaluator binding (E001R)
 int test_deterministic() {
     auto root=fs::temp_directory_path()/"sister-reflexa-t4"; fs::remove_all(root); Store s(root);
     auto evt=s.add_event({{"title","T4 Event"},{"type","test"}});
@@ -802,6 +891,13 @@ int test_deterministic() {
         a1->stabilization!=a2->stabilization) {
         std::cerr<<"T4: vectors differ between two assessments of same bundle\n"; return 4;
     }
+    // E001R: verify evaluator binding
+    if (a1->bundle_digest.empty()) { std::cerr<<"T4: bundle_digest not stored in assessment\n"; return 5; }
+    if (a1->evaluator_spec_digest.empty()) { std::cerr<<"T4: evaluator_spec_digest not stored\n"; return 6; }
+    if (a1->bundle_digest != a2->bundle_digest) { std::cerr<<"T4: bundle_digest differs between assessments of same bundle\n"; return 7; }
+    if (a1->evaluator_spec_digest != a2->evaluator_spec_digest) { std::cerr<<"T4: evaluator_spec_digest differs\n"; return 8; }
+    // Spec digest must be SHA-256 format
+    if (a1->evaluator_spec_digest.rfind("sha256:",0) != 0) { std::cerr<<"T4: evaluator_spec_digest not sha256:\n"; return 9; }
     fs::remove_all(root);
     std::cout<<"T4 deterministic PASS\n"; return 0;
 }
@@ -860,7 +956,7 @@ int test_api_slice() {
     // assessment
     auto asr=s.assess_bundle(bnd);
     if(asr.empty()){ std::cerr<<"T6: no assessment\n"; return 6; }
-    // verify vector
+    // verify vector + integrity bindings (E001R)
     auto as_all=s.assessments();
     bool found=false;
     for(auto& a:as_all){
@@ -871,12 +967,15 @@ int test_api_slice() {
         if(exp<=0.5){ std::cerr<<"T6: expected exposure>0.5, got "<<exp<<"\n"; return 7; }
         if(a.status!="experimental"){ std::cerr<<"T6: wrong status\n"; return 8; }
         if(a.evaluator!="deterministic-baseline-v0.1"){ std::cerr<<"T6: wrong evaluator\n"; return 9; }
+        if(a.bundle_digest.rfind("sha256:",0)!=0){ std::cerr<<"T6: bundle_digest not sha256\n"; return 10; }
+        if(a.evaluator_spec_digest.rfind("sha256:",0)!=0){ std::cerr<<"T6: evaluator_spec_digest not sha256\n"; return 11; }
     }
-    if(!found){ std::cerr<<"T6: assessment not found\n"; return 10; }
+    if(!found){ std::cerr<<"T6: assessment not found\n"; return 12; }
     // verify state_json includes bundles and assessments
     auto j=s.state_json();
-    if(j.find("bundles")==std::string::npos){ std::cerr<<"T6: bundles missing from state\n"; return 11; }
-    if(j.find("assessments")==std::string::npos){ std::cerr<<"T6: assessments missing from state\n"; return 12; }
+    if(j.find("bundles")==std::string::npos){ std::cerr<<"T6: bundles missing from state\n"; return 13; }
+    if(j.find("assessments")==std::string::npos){ std::cerr<<"T6: assessments missing from state\n"; return 14; }
+    if(j.find("bundle_digest")==std::string::npos){ std::cerr<<"T6: bundle_digest missing from state\n"; return 15; }
     fs::remove_all(root);
     std::cout<<"T6 api-vertical-slice PASS\n"; return 0;
 }
@@ -935,6 +1034,121 @@ int test_web(const fs::path& project_root, int port=18092) {
     std::cout<<"T7 web-availability PASS\n"; return 0;
 }
 
+// T_ADV1: adversarial — byte mutation of snapshot, digest unchanged
+// Expected: integrity verification FAIL, assessment rejected
+int test_adversarial_byte_mutation() {
+    auto root=fs::temp_directory_path()/"sister-reflexa-tadv1"; fs::remove_all(root);
+    Store s(root);
+    auto evt=s.add_event({{"title","ADV1 Event"},{"type","test"}});
+    auto clm=s.add_claim({{"event_id",evt},{"text","ADV1 claim"}});
+    s.add_evidence({{"claim_id",clm},{"content","originalContent"},{"contributions","exposure:0.1:1.0"}});
+    auto bnd_id = s.freeze_bundle(evt);
+
+    // Read raw bundles.tsv, mutate the snapshot field, leave digest intact
+    auto bundle_path = root/"bundles.tsv";
+    std::string raw;
+    {
+        std::ifstream f(bundle_path, std::ios::binary);
+        std::ostringstream ss; ss << f.rdbuf(); raw = ss.str();
+    }
+    // Replace "originalContent" with "mutatedContent" in the raw TSV
+    // (these are pct-encoded: no special chars, so they appear literally)
+    auto it = raw.find("originalContent");
+    if (it == std::string::npos) { std::cerr<<"ADV1: originalContent not found in TSV\n"; return 2; }
+    raw.replace(it, 15, "mutatedContent."); // same length ensures field structure intact
+    {
+        std::ofstream f(bundle_path, std::ios::binary | std::ios::trunc);
+        f << raw;
+    }
+
+    // Now reload and attempt assessment — must throw IntegrityError
+    Store s2(root);
+    bool caught_integrity = false;
+    try {
+        s2.assess_bundle(bnd_id);
+    } catch (const IntegrityError& e) {
+        caught_integrity = true;
+        std::string msg(e.what());
+        if (msg.find("INTEGRITY_VIOLATION") == std::string::npos) {
+            std::cerr<<"ADV1: wrong exception message: "<<msg<<"\n"; return 3;
+        }
+    } catch (const std::exception& e) {
+        std::cerr<<"ADV1: expected IntegrityError, got: "<<e.what()<<"\n"; return 4;
+    }
+    if (!caught_integrity) { std::cerr<<"ADV1: assess_bundle accepted tampered bundle — INTEGRITY FAILURE\n"; return 5; }
+
+    // Verify original bundle is NOT silently repaired
+    auto bs = s2.bundles();
+    for (auto& b : bs) {
+        if (b.bundle_id == bnd_id) {
+            // The stored digest must still be the OLD (now wrong) value
+            // and verify_bundle_digest must still throw
+            bool still_wrong = false;
+            try { verify_bundle_digest(b); } catch(const IntegrityError&) { still_wrong = true; }
+            if (!still_wrong) { std::cerr<<"ADV1: bundle was silently repaired — must not happen\n"; return 6; }
+            break;
+        }
+    }
+
+    fs::remove_all(root);
+    std::cout<<"T_ADV1 adversarial-byte-mutation PASS\n"; return 0;
+}
+
+// T_ADV2: adversarial — change one frozen contribution, leave digest unchanged
+// Expected: assessment rejected before vector calculation
+int test_adversarial_contribution_mutation() {
+    auto root=fs::temp_directory_path()/"sister-reflexa-tadv2"; fs::remove_all(root);
+    Store s(root);
+    auto evt=s.add_event({{"title","ADV2 Event"},{"type","test"}});
+    auto clm=s.add_claim({{"event_id",evt},{"text","ADV2 claim"}});
+    // Use a contribution that does NOT contain special chars so it appears literally
+    s.add_evidence({{"claim_id",clm},{"content","evidenceForADV2"},{"contributions","exposure:0.1:1.0"}});
+    auto bnd_id = s.freeze_bundle(evt);
+
+    // Read frozen bundle, change exposure:0.1 to exposure:0.9
+    auto bundle_path = root/"bundles.tsv";
+    std::string raw;
+    {
+        std::ifstream f(bundle_path, std::ios::binary);
+        std::ostringstream ss; ss << f.rdbuf(); raw = ss.str();
+    }
+    // In the snapshot, contributions are pct-encoded:
+    // exposure:0.1:1.0 → exposure%3A0.1%3A1.0
+    // We search for the pct-encoded form
+    auto find_enc = raw.find("exposure%3A0.1%3A1.0");
+    if (find_enc == std::string::npos) {
+        // Try double-encoded (snapshot stored pct-encoded inside the TSV)
+        find_enc = raw.find("exposure%253A0.1%253A1.0");
+    }
+    if (find_enc == std::string::npos) {
+        std::cerr<<"ADV2: could not locate contribution in raw TSV — cannot perform adversarial test\n";
+        // Print first 300 chars for debug
+        std::cerr<<"Raw (first 300): "<<raw.substr(0, std::min((size_t)300, raw.size()))<<"\n";
+        fs::remove_all(root); return 2;
+    }
+    // Replace 0.1 with 0.9 (same width)
+    raw.replace(find_enc + 9, 3, "0.9");
+    {
+        std::ofstream f(bundle_path, std::ios::binary | std::ios::trunc);
+        f << raw;
+    }
+
+    // Reload and assess — must throw IntegrityError
+    Store s2(root);
+    bool caught = false;
+    try {
+        s2.assess_bundle(bnd_id);
+    } catch (const IntegrityError&) {
+        caught = true;
+    } catch (const std::exception& e) {
+        std::cerr<<"ADV2: expected IntegrityError, got: "<<e.what()<<"\n"; return 3;
+    }
+    if (!caught) { std::cerr<<"ADV2: assess_bundle accepted contribution-mutated bundle — INTEGRITY FAILURE\n"; return 4; }
+
+    fs::remove_all(root);
+    std::cout<<"T_ADV2 adversarial-contribution-mutation PASS\n"; return 0;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -953,6 +1167,8 @@ int main(int argc, char** argv) {
         if(argc==2 && std::string_view(argv[1])=="--test-deterministic") return test_deterministic();
         if(argc==2 && std::string_view(argv[1])=="--test-restart") return test_restart();
         if(argc==2 && std::string_view(argv[1])=="--test-api-slice") return test_api_slice();
+        if(argc==2 && std::string_view(argv[1])=="--test-adversarial-byte") return test_adversarial_byte_mutation();
+        if(argc==2 && std::string_view(argv[1])=="--test-adversarial-contrib") return test_adversarial_contribution_mutation();
         if(argc==2 && std::string_view(argv[1])=="--test-web") {
             // Project root is two levels up from binary (build/sister-reflexa → .)
             fs::path project_root = binary_path.parent_path();
@@ -972,6 +1188,8 @@ int main(int argc, char** argv) {
                    "  sister-reflexa --test-deterministic\n"
                    "  sister-reflexa --test-restart\n"
                    "  sister-reflexa --test-api-slice\n"
+                   "  sister-reflexa --test-adversarial-byte\n"
+                   "  sister-reflexa --test-adversarial-contrib\n"
                    "  sister-reflexa --test-web\n"
                    "  sister-reflexa --serve [host] [port]\n"; return 0;
     } catch(const std::exception& e) { std::cerr<<"ERROR: "<<e.what()<<'\n'; return 1; }

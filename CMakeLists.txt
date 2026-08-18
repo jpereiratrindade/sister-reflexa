@@ -8,6 +8,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(sister-reflexa src/main.cpp)
 target_compile_definitions(sister-reflexa PRIVATE SISTER_REFLEXA_VERSION="0.1.0")
 
+# E001R: SHA-256 requires OpenSSL
+find_package(OpenSSL REQUIRED)
+target_link_libraries(sister-reflexa PRIVATE OpenSSL::Crypto)
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(sister-reflexa PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
@@ -42,4 +46,12 @@ if(BUILD_TESTING)
   # T7: web availability (starts local server on port 18092, checks /api/health)
   add_test(NAME T7_web                COMMAND sister-reflexa --test-web)
   set_tests_properties(T7_web PROPERTIES PASS_REGULAR_EXPRESSION "PASS" TIMEOUT 10)
+
+  # T_ADV1: adversarial — byte mutation of snapshot, digest unchanged (E001R)
+  add_test(NAME T_ADV1_byte_mutation  COMMAND sister-reflexa --test-adversarial-byte)
+  set_tests_properties(T_ADV1_byte_mutation PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
+
+  # T_ADV2: adversarial — contribution mutation, digest unchanged (E001R)
+  add_test(NAME T_ADV2_contrib_mutation COMMAND sister-reflexa --test-adversarial-contrib)
+  set_tests_properties(T_ADV2_contrib_mutation PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
 endif()
